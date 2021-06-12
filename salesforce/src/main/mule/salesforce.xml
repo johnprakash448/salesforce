@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:email="http://www.mulesoft.org/schema/mule/email" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="eb726a6f-34d4-40b8-b4d5-b0e937665d05" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="955319f2-5484-439a-8743-a58e3fb0ab50" >
+		<salesforce:basic-connection username="prakash@yeddu.com" password="Prakkii448*" securityToken="v8Y2SkNdE97jcBH4S1aKqlxf" />
+	</salesforce:sfdc-config>
+	<email:smtp-config name="Email_SMTP" doc:name="Email SMTP" doc:id="1a00b2aa-3e7c-4edc-ace0-e75fb2a8829c" >
+		<email:smtp-connection host="smtp.gmail.com" port="587" user="mule4hyd@gmail.com" password="6Tfcvgy7@" >
+			<pooling-profile />
+			<email:properties >
+				<email:property key="mail.smtp.starttls.enable" value="true" />
+			</email:properties>
+		</email:smtp-connection>
+	</email:smtp-config>
+	<flow name="salesforceFlow" doc:id="79364a8f-97d6-4835-aa00-ed0e8afab07c" >
+		<http:listener doc:name="Listener" doc:id="24a86eb9-c026-4f48-8ba7-85579eebcd6d" config-ref="HTTP_Listener_config" path="/sales"/>
+		<logger level="INFO" doc:name="Logger" doc:id="a56df477-03f9-48dc-b7a6-1d22d7a458ce" message="#[payload]"/>
+		<salesforce:query doc:name="Query" doc:id="3862f1a3-5a8c-4369-8ca8-c5db21e29d94" config-ref="Salesforce_Config">
+			<salesforce:salesforce-query ><![CDATA[SELECT Id, Name FROM Account where id =':empid'
+
+]]></salesforce:salesforce-query>
+			<salesforce:parameters ><![CDATA[#[output application/java
+---
+{
+	"empid" : attributes.queryParams.id
+}]]]></salesforce:parameters>
+		</salesforce:query>
+		<logger level="INFO" doc:name="Logger" doc:id="3dd9d04f-7edc-4484-a893-d8b36920cc56" message="#[payload]"/>
+		<ee:transform doc:name="Transform Message" doc:id="296f611e-1c12-4bea-9eb6-2c06d77a5ec8" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<email:send doc:name="Send" doc:id="1da0c60c-b04f-41fd-a179-40852dbfcb38" config-ref="Email_SMTP" fromAddress="mule4hyd@gmail.com" subject="Print the data successfully">
+			<email:to-addresses >
+				<email:to-address value="prakash.oye@gmail.com" />
+				<email:to-address value="mule4hyd@gmail.com" />
+			</email:to-addresses>
+		</email:send>
+	</flow>
+	<flow name="salesforceFlow1" doc:id="3f01b7ad-a1fb-4c22-959e-a72406e42e0e" >
+		<http:listener doc:name="Listener" doc:id="5077e706-4400-405c-9a67-0092c97ec289" config-ref="HTTP_Listener_config" path="/upsert"/>
+		<logger level="INFO" doc:name="Logger" doc:id="c71a7234-0fd3-4eac-81d1-a4380cc061bb" message="#[payload]"/>
+		<ee:transform doc:name="Transform Message" doc:id="51b95276-98bc-4978-826f-bfcb02ad91d0" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+--- 
+payload map
+{
+	TechMname__c : $.name,
+	TechMID__c: $.id,
+	Skill__c : $.skill
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce:upsert objectType="TechM__c" doc:name="Upsert" doc:id="6ffa74aa-c870-48bd-80de-e5faca3b0ba3" config-ref="Salesforce_Config" externalIdFieldName="TechMID__c"/>
+		<ee:transform doc:name="Transform Message" doc:id="6430937d-e636-485c-b550-53ac7eba896e" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="salesforceFlow2" doc:id="555b9f36-66f5-4552-ac85-ac9b5db3ef55" >
+		<http:listener doc:name="delete" doc:id="df698c32-c09c-43a2-8489-12a34b0194c5" config-ref="HTTP_Listener_config" path="/delete"/>
+		<logger level="INFO" doc:name="Logger" doc:id="98c7fdb9-3e24-4b63-b60a-0dbdd6283be2" message="delete the data"/>
+		<ee:transform doc:name="Transform Message" doc:id="fc790bfe-9397-4b10-9495-4ed5f343bc32" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload map
+{
+	TechMID__c : $.id
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce:delete doc:name="Delete" doc:id="04aa2375-be63-4405-b54a-bbb960ca76c4" config-ref="Salesforce_Config">
+			<salesforce:ids ><![CDATA[#[payload.TechMID__c]]]></salesforce:ids>
+		</salesforce:delete>
+		<ee:transform doc:name="Transform Message" doc:id="4eab6f03-dfde-42b6-9e94-728560a891a5">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
